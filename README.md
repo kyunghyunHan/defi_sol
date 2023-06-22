@@ -18,3 +18,7 @@
 - 적은것이 좋은 디파이서비스
 
 ## Impermanent Lose
+
+## CSMM
+
+- x+y= k
