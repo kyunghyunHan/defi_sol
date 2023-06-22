@@ -57,4 +57,14 @@ cpmm
         require(outputAmount>= _minTokens,"Inffucient outputamount");
         IERC20(token).transfer(msg.sender,outputAmount);
     }
+    
+ //ERC20->ETH
+  function tokenToEthSwap(uint256 _tokenSold,uint256 _minEth)public payable{
+
+        uint256 outputAmount= getOutputAmount(_tokenSold,token.balanceOf(address(this)),address(this).balance);
+        require(outputAmount>= _minEth,"Inffucient outputamount");
+        IERC20(token).transferFrom(msg.sender, address(this),_tokenSold);
+        payable(msg.sender).transfer(outputAmount);
+    }
+    
 }
