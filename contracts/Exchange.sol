@@ -27,5 +27,7 @@ contract Exchange {
     function getPrice(uint256 inputReserve,uint256 outputReserve)public pure returns (uint256){
 
         uint256 numerator= inputReserve;
+        uint256 denominator= outputReserve;
+        return numerator/denominator;
     }
 }
