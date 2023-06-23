@@ -2,20 +2,51 @@
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract Exchange {
+contract Exchange is ERC20{
 
     IERC20 token;
 
 
-    constructor(address _token){
+    constructor(address _token)ERC20("Gray Uniswap V2","GUNI-V2"){
         token= IERC20(_token);
     }
-    function addLiquidity(uint256 _tokenAmount) public payable{
-        token.transferFrom(msg.sender,address(this),_tokenAmount);
+    //cpmm
+    //LP토큰발행
+    function addLiquidity(uint256 _maxTokens) public payable{
+        //전체 유틸리니
+        uint256 totalLiquidity= totalSupply();
+        uint256 ethReserve= address(this).balance- msg.value;
+        uint256 tokenReserve= token.balanceOf(address(this));
+        uint256 tokenAmount= msg.value * tokenReserve /ethReserve;
+        require(_maxTokens  >= tokenAmount);
+        token.transferFrom(msg.sender, address(this), tokenAmount);
+        uint256 liquidityMinted= totalLiquidity * msg.value/ethReserve;
+        _mint(msg.sender,liquidityMinted);
+        if (totalLiquidity>0){
+//유동성 0인경우
+        }else{
+      uint256 tokenAmount= _maxTokens;
+      uint256 initalLiquidity= address(this).balance;
+      _mint(msg.sender,initalLiquidity);
+
+        token.transferFrom(msg.sender,address(this),tokenAmount);
+        }
+      
 
     }
+   function removeLiquidity(uint256 _lpTokenAmount)public{
+    uint256 totalLiquidity= totalSupply();
+    uint256 ethAmount= _lpTokenAmount*address(this).balance/totalLiquidity;
+    uint256 tokenAmount= _lpTokenAmount * token.balanceOf(address(this))/totalLiquidity;
 
+    _burn(msg.sender,_lpTokenAmount);
+    payable(msg.sender).transfer(ethAmount);
+
+    token.transfer(msg.sender, tokenAmount);
+    
+   }
     function ethToTokenSwap()public payable{
         uint256 inputAmount= msg.value;
 
