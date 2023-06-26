@@ -1,137 +1,138 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.9;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./interfaces/IFactory.sol";
+import "./interfaces/IExchange.sol";
+
 contract Exchange is ERC20{
+    event TokenPurchase(
+        address indexed buyer,
+        uint256 indexed ethSold,
+        uint256 indexed tokensBought
+    );
+    event EthPurchase(
+        address indexed buyer,
+        uint256 indexed ethSold,
+        uint256 indexed tokensBought
+    );
+    event AddLiquidity(
+        address indexed provider,
+        uint256 indexed ethAmount,
+        uint256 indexed tokenAmount
+    );
+    event RemoveLiquidity(
+        address indexed provider,
+        uint256 indexed ethAmount,
+        uint256 indexed tokenAmount
+    );
 
     IERC20 token;
     IFactory factory;
 
-    constructor(address _token)ERC20("Gray Uniswap V2","GUNI-V2"){
-        token= IERC20(_token);
-        factory= IFactor(msg.sender);
+    constructor (address _token) ERC20("SWAP LP","LP-V1"){
+        token = IERC20(_token); 
+        factory = IFactory(msg.sender);
     }
-    //cpmm
-    //LP토큰발행
+
+
+    function getEthBalance() public view returns (uint256) {
+    return address(this).balance;
+    }
+
+    //유동성 추가 아예 없을때와 유동성 있는 곳에 추가할 경우
     function addLiquidity(uint256 _maxTokens) public payable{
-        //전체 유틸리니
-        uint256 totalLiquidity= totalSupply();
-        uint256 ethReserve= address(this).balance- msg.value;
-        uint256 tokenReserve= token.balanceOf(address(this));
-        uint256 tokenAmount= msg.value * tokenReserve /ethReserve;
-        require(_maxTokens  >= tokenAmount);
-        token.transferFrom(msg.sender, address(this), tokenAmount);
-        uint256 liquidityMinted= totalLiquidity * msg.value/ethReserve;
-        _mint(msg.sender,liquidityMinted);
-        if (totalLiquidity>0){
-      //유동성 0인경우
+        uint256 totalLiquidity = totalSupply();
+        if(totalLiquidity>0){
+            uint256 ethReserve = address(this).balance - msg.value;
+            uint256 tokenReserve = token.balanceOf(address(this));
+            uint256 tokenAmount = msg.value * ethReserve/tokenReserve;
+            require(_maxTokens >= tokenAmount);
+            token.transferFrom(msg.sender,address(this),tokenAmount);
+            uint256 liquidityMinted = totalLiquidity * msg.value/ethReserve;
+            _mint(msg.sender,liquidityMinted);
         }else{
-      uint256 tokenAmount= _maxTokens;
-      uint256 initalLiquidity= address(this).balance;
-      _mint(msg.sender,initalLiquidity);
-
-        token.transferFrom(msg.sender,address(this),tokenAmount);
+            uint256 tokenAmount = _maxTokens;
+            uint256 initialLiquidity = address(this).balance;
+            _mint(msg.sender,initialLiquidity);
+            token.transferFrom(msg.sender,address(this),tokenAmount);
         }
-      
+    }
+    //유동성 제거
+    function removeLiquidity(uint256 _lpTokenAmount) public{
+        require(_lpTokenAmount > 0);
+        uint256 totalLiquidity = totalSupply();
+        uint256 ethAmount = _lpTokenAmount * address(this).balance / totalLiquidity;
+        uint256 tokenAmount = _lpTokenAmount * token.balanceOf(address(this))/totalLiquidity;
 
+        _burn(msg.sender,_lpTokenAmount);
+
+        payable(msg.sender).transfer(ethAmount);
+        token.transfer(msg.sender,tokenAmount);
     }
 
-    /*
-    유동성 공급자가 유동성을 제거할떄는 LP토큰을 소각하고 ETH와 토큰을 돌려받는다
 
-    돌려받는 ETH와 토큰의 개수는 내가 회수하고자 하는 LP토큰의 개수와 전체 풀의 비율만큼 돌려받는다
-     */
-   function removeLiquidity(uint256 _lpTokenAmount)public{
-    uint256 totalLiquidity= totalSupply();
-    uint256 ethAmount= _lpTokenAmount*address(this).balance/totalLiquidity;
-    uint256 tokenAmount= _lpTokenAmount * token.balanceOf(address(this))/totalLiquidity;
 
-    _burn(msg.sender,_lpTokenAmount);
-    payable(msg.sender).transfer(ethAmount);
-
-    token.transfer(msg.sender, tokenAmount);
-    
-   }
-    function ethToTokenSwap()public payable{
-        uint256 inputAmount= msg.value;
-
-        uint256 outputAmount= inputAmount;
-
-        IERC20(token).transfer(msg.sender,outputAmount);
+    //ETH -> ERC20
+    function ethToTokenSwap(uint256 _minToken) public payable{
+        //address(this).balance-msg.value 빼준 이유는 함수를 실행한 시점에서 ETH값이 더해진 상태로 조회되기 때문에 그 값을 빼준다.
+        ethToToken(_minToken,msg.sender);
     }
-    function getPrice(uint256 inputReserve,uint256 outputReserve)public pure returns (uint256){
 
-        uint256 numerator= inputReserve;
-        uint256 denominator= outputReserve;
-        return numerator/denominator;
+    function ethToTransfer(uint256 _minToken,address _recipient) public payable{
+        require(_recipient != address(0));
+        ethToToken(_minToken,_recipient);
     }
-//cpmm
 
+    //개선된 ETH -> ERC20 
+    function ethToToken(uint256 _minToken,address _recipient) private{
+        //address(this).balance-msg.value 빼준 이유는 함수를 실행한 시점에서 ETH값이 더해진 상태로 조회되기 때문에 그 값을 빼준다.
+        uint256 outputAmount = getOutputAmountWithFee(msg.value,address(this).balance-msg.value,token.balanceOf(address(this)));
+        require(outputAmount >= _minToken);
 
-/*
-cpmm
-
-초기유동성
-
-1000 4000
-2000 2000
-
-4000- (4000+1000)/1000+1000
- */
-    //가격측정
-    function getOutputAmount(uint256 inputAmount, uint256 inputReserve,uint256 outputReserve)public pure returns (uint256){
-
-        uint256 numerator= outputReserve*inputAmount;
-        uint256 denominator= inputReserve*inputAmount;
-        return numerator/denominator;
+        token.transfer(_recipient,outputAmount);
+        
+        emit TokenPurchase(_recipient, msg.value, outputAmount);
     }
-    
-      /*
-   트레이더가 지급한 수수료만큼 유동성 풀의 토큰 개수가 증가
-     트레이더에게 수수료를 제외하고 토큰을 스왑해준다
-     예를들어 100개의 토큰을 input으로 넣엇는데 99개의 inputAmount로 OutputAmount를 계산한다
-    그만큼 OutputAmount가 줄어들어 내가 받게 되는 토큰의 개수가 줄어든다
-    OutputAmount수수료만큼 Output에 해당하는 토큰의 Reserve가 증가하는 효과가 있다.
-    */  
-    function getOutputAmountWithFee(uint256 inputAmount, uint256 inputReserve,uint256 outputReserve)public pure returns (uint256){
-        uint256 inputAmountWithFee= inputAmount *99;
-        uint256 numerator= inputAmountWithFee*outputReserve;
-        uint256 denominator= (inputReserve*100+inputAmountWithFee);
-        return numerator/denominator;
-    }
-    
-    
- //ETH->ERC20
-  function ethToTokenSwap2(uint256 _minTokens)public payable{
 
-        // uint256 outputAmount= getOutputAmount(msg.value, address(this).balance-msg.value, token.balanceOf(address(this)));
-
-        uint256 outputAmount= getOutputAmountWithFee(msg.value, address(this).balance-msg.value, token.balanceOf(address(this)));
-        require(outputAmount>= _minTokens,"Inffucient outputamount");
-        IERC20(token).transfer(msg.sender,outputAmount);
-    }
-    
- //ERC20->ETH
-  function tokenToEthSwap(uint256 _tokenSold,uint256 _minEth)public payable{
-        // uint256 outputAmount= getOutputAmount(_tokenSold,token.balanceOf(address(this)),address(this).balance);
-
-        uint256 outputAmount= getOutputAmountWithFee(_tokenSold,token.balanceOf(address(this)),address(this).balance);
-        require(outputAmount>= _minEth,"Inffucient outputamount");
-        IERC20(token).transferFrom(msg.sender, address(this),_tokenSold);
+    //ERC20 -> ETH
+    function tokenToEthSwap(uint256 _tokenSold,uint256 _minEth) public payable{
+        
+        uint256 outputAmount = getOutputAmountWithFee(_tokenSold,token.balanceOf(address(this)),address(this).balance);
+        require(outputAmount >= _minEth,"outputAmount >= _minEth");
+        token.transferFrom(msg.sender,address(this),_tokenSold);
         payable(msg.sender).transfer(outputAmount);
     }
-    
+    //ERC20 -> ERC20
+    //_minTokenBought 최종적으로 스왑 했을 때 얻게 되는 토큰의 수
+    //스왑 할 때 사용할 ETH의 수가 계산보다 적을 때 _minEthBought를 이용해 중간에 확인작업을 한다
+    function tokenToTokenSwap(uint256 _tokenSold,uint256 _minTokenBought,uint256 _minEthBought,address _tokenAddress) public payable{
+        address toTokenExchangeAddress = factory.getExchange(_tokenAddress);
 
-    /*비영구적 손실
-    
-    - 유동성 풀에 공급한 나의 유동성의 자산 해당하는 가치변화
-    - 유동성 공급을 하지 않고 토큰을 그냥 가지고 있는 것과 유동성 공급 후 다시 회수 했을 떄 받게 되는 토큰 개수의 변화
-     */
+        uint256 ethOutputAmount = getOutputAmountWithFee(_tokenSold,token.balanceOf(address(this)),address(this).balance);
+        require(ethOutputAmount >= _minEthBought,"ethOutputAmount >= _minEthBought");
+        IERC20(token).transferFrom(msg.sender,address(this),_tokenSold);
+
+        IExchange(toTokenExchangeAddress).ethToTransfer{value:ethOutputAmount}(_minTokenBought,msg.sender);
+        payable(msg.sender).transfer(ethOutputAmount);
+    }
+
+    //Eth
+    function getOutputAmountWithFee(uint256 inputAmount,uint256 inputReserve,uint256 outputReserve) public pure returns (uint256){
+        uint256 inputAmountWithFee = inputAmount * 99;
+        uint256 numerator = outputReserve * inputAmountWithFee;
+        uint256 denominator = inputReserve * 100  + inputAmountWithFee;
+        return numerator / denominator;
+    }
+
+    function tokenBalanceOf() public view returns (uint256){
+        return token.balanceOf(address(this));
+    }
+
+    function ethBalanceOf() public view returns (uint256){
+        return address(this).balance;
+    }
 
 
-
-
-  
 }

@@ -30,4 +30,5 @@ contract Exchange {
         uint256 denominator= outputReserve;
         return numerator/denominator;
     }
+    
 }

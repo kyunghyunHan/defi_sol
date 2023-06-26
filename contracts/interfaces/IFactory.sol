@@ -1,10 +1,6 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.9;
-
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
 interface IFactory {
     function getExchange(address _token) external view returns (address);
-
-
-    
 }
