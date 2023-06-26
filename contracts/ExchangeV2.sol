@@ -17,7 +17,7 @@ contract Exchange is ERC20{
         uint256 indexed ethSold,
         uint256 indexed tokensBought
     );
-    event AddLiquidity(
+    event AddLiquidity( 
         address indexed provider,
         uint256 indexed ethAmount,
         uint256 indexed tokenAmount
